@@ -1,0 +1,31 @@
+# deps
+node_modules/
+.expo/
+.expo-shared/
+dist/
+build/
+
+# bun
+bun.lock
+.bun-create/
+
+# editors
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# logs
+*.log
+npm-debug.log*
+
+# runtime
+/tmp/conductor/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# expo + tooling local state
+.claude/
