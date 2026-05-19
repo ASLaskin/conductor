@@ -98,7 +98,6 @@ transcript resumes. No restart, no config swap.
 
 - Phone needs same Wi-Fi by default. Use `./start.sh --anywhere` + Tailscale
   to break that.
-- Multi line prompts collapse to one line Claude's REPL submits on Enter.
 - Sending only works in Terminal.app and iTerm2. Inside tmux, VS Code's
   integrated terminal, or screen, the transcript still streams but the
   composer is disabled.
