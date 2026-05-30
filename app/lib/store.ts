@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { create } from "zustand";
 import { playAlert, playDone } from "./sounds";
-import type { Message, Session, WSEvent } from "./types";
+import type { AnswerItem, Message, Session, WSEvent } from "./types";
 
 type ConnState = "disconnected" | "connecting" | "connected";
 
@@ -219,4 +219,19 @@ export async function sendInput(id: string, text: string): Promise<void> {
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const data = await r.json();
   if (!data.ok) throw new Error(data.reason ?? "send failed");
+}
+
+export async function sendAnswer(
+  id: string,
+  answers: AnswerItem[],
+): Promise<void> {
+  const base = useStore.getState().serverUrl;
+  const r = await fetch(`${base}/sessions/${id}/answer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answers }),
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const data = await r.json();
+  if (!data.ok) throw new Error(data.reason ?? "answer failed");
 }

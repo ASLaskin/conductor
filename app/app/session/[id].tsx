@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { MessageBubble } from "../../components/MessageBubble";
+import { QuestionCard } from "../../components/QuestionCard";
 import { StatusDot } from "../../components/StatusDot";
 import { detachSession, sendInput, useStore } from "../../lib/store";
 import { colors, radii, space, statusLabel, typography } from "../../lib/theme";
@@ -133,34 +134,43 @@ export default function SessionScreen() {
             }
           />
 
-          <View style={styles.composer}>
-            <TextInput
-              style={[styles.input, !canSend && styles.inputDisabled]}
-              placeholder={
-                canSend
-                  ? "Send a prompt. Tap mic on the keyboard for voice."
-                  : "Re-run /conductor-add inside Terminal.app or iTerm2 to enable sending."
-              }
-              placeholderTextColor={colors.textDim}
-              value={draft}
-              onChangeText={setDraft}
-              editable={canSend}
-              multiline
-              maxLength={4000}
-              blurOnSubmit={false}
+          {session.pendingQuestion &&
+          session.pendingQuestion.questions.length > 0 ? (
+            <QuestionCard
+              sessionId={session.id}
+              pending={session.pendingQuestion}
             />
-            <Pressable
-              onPress={onSend}
-              disabled={!draft.trim() || sending || !canSend}
-              style={({ pressed }) => [
-                styles.sendBtn,
-                (!draft.trim() || sending || !canSend) && styles.sendBtnDisabled,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={styles.sendBtnText}>{sending ? "…" : "Send"}</Text>
-            </Pressable>
-          </View>
+          ) : (
+            <View style={styles.composer}>
+              <TextInput
+                style={[styles.input, !canSend && styles.inputDisabled]}
+                placeholder={
+                  canSend
+                    ? "Send a prompt. Tap mic on the keyboard for voice."
+                    : "Re-run /conductor-add inside Terminal.app or iTerm2 to enable sending."
+                }
+                placeholderTextColor={colors.textDim}
+                value={draft}
+                onChangeText={setDraft}
+                editable={canSend}
+                multiline
+                maxLength={4000}
+                blurOnSubmit={false}
+              />
+              <Pressable
+                onPress={onSend}
+                disabled={!draft.trim() || sending || !canSend}
+                style={({ pressed }) => [
+                  styles.sendBtn,
+                  (!draft.trim() || sending || !canSend) &&
+                    styles.sendBtnDisabled,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={styles.sendBtnText}>{sending ? "…" : "Send"}</Text>
+              </Pressable>
+            </View>
+          )}
         </SafeAreaView>
       </KeyboardAvoidingView>
     </>

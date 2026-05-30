@@ -67,6 +67,46 @@ export const sendInputHandler = (
     );
   });
 
+export const answerHandler = (
+  id: string,
+  body: unknown,
+): Effect.Effect<SendInputResult, InvalidPayload, SessionStore> =>
+  Effect.gen(function* () {
+    const parsed = yield* parseBody(S.AnswerBody, body);
+    const store = yield* SessionStore;
+    return yield* store
+      .answerQuestion(
+        id,
+        parsed.answers.map((a) => ({
+          optionIndices: a.optionIndices,
+          otherText: a.otherText,
+        })),
+      )
+      .pipe(
+        Effect.as<SendInputResult>({ ok: true }),
+        Effect.catchTags({
+          SessionNotFound: () =>
+            Effect.succeed<SendInputResult>({
+              ok: false,
+              reason: "session not found",
+            }),
+          NoTerminalLink: () =>
+            Effect.succeed<SendInputResult>({
+              ok: false,
+              reason:
+                "no terminal tab linked. re-run /conductor-add inside Terminal.app or iTerm2.",
+            }),
+          NoPendingQuestion: () =>
+            Effect.succeed<SendInputResult>({
+              ok: false,
+              reason: "no question is waiting for an answer.",
+            }),
+          OsascriptFailed: (e) =>
+            Effect.succeed<SendInputResult>({ ok: false, reason: e.reason }),
+        }),
+      );
+  });
+
 export const getSessionHandler = (id: string) =>
   Effect.gen(function* () {
     const store = yield* SessionStore;
@@ -112,6 +152,32 @@ export const hookHandler = (
       case "user_prompt_submit": {
         const p = yield* parseBody(S.HookCommon, body);
         return yield* store.onHookUserPromptSubmit({
+          claude_session_id: p.claude_session_id,
+        });
+      }
+      // AskUserQuestion (the option picker) is a tool, not a Notification — so
+      // it gets its own PreToolUse/PostToolUse signals. PreToolUse carries the
+      // structured questions so clients can render a real card; PostToolUse
+      // means the user answered, so Claude resumes and the card clears.
+      case "ask_question": {
+        const p = yield* parseBody(S.HookAskQuestion, body);
+        return yield* store.onHookAskQuestion({
+          claude_session_id: p.claude_session_id,
+          message: p.message,
+          questions: p.questions.map((q) => ({
+            header: q.header,
+            question: q.question,
+            multiSelect: q.multiSelect,
+            options: q.options.map((o) => ({
+              label: o.label,
+              description: o.description,
+            })),
+          })),
+        });
+      }
+      case "ask_answered": {
+        const p = yield* parseBody(S.HookCommon, body);
+        return yield* store.onHookAskAnswered({
           claude_session_id: p.claude_session_id,
         });
       }

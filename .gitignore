@@ -29,3 +29,6 @@ npm-debug.log*
 
 # expo + tooling local state
 .claude/
+
+# local agent guide (kept local, not published)
+CLAUDE.md

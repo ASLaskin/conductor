@@ -9,6 +9,7 @@ import { SessionStore } from "./SessionStore.ts";
 import { runtime } from "./runtime.ts";
 import * as S from "./schema.ts";
 import {
+  answerHandler,
   attachHandler,
   detachHandler,
   getSessionHandler,
@@ -44,6 +45,16 @@ app.post("/sessions/attach", async (c) => {
 app.post("/sessions/:id/input", async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const program = sendInputHandler(c.req.param("id"), body).pipe(Effect.either);
+  const either = await runtime.runPromise(program);
+  if (either._tag === "Left") {
+    return c.json({ error: either.left.reason }, 400);
+  }
+  return c.json(either.right);
+});
+
+app.post("/sessions/:id/answer", async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const program = answerHandler(c.req.param("id"), body).pipe(Effect.either);
   const either = await runtime.runPromise(program);
   if (either._tag === "Left") {
     return c.json({ error: either.left.reason }, 400);

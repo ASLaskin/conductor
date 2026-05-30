@@ -5,6 +5,7 @@ import { ApiClient } from "./lib/ApiClient";
 import { useEffectRunner } from "./lib/useEffectRunner";
 import { AttachCard } from "./components/AttachCard";
 import { Composer } from "./components/Composer";
+import { QuestionCard } from "./components/QuestionCard";
 import { Header } from "./components/Header";
 import { SessionList } from "./components/SessionList";
 import { StatusDot } from "./components/StatusDot";
@@ -18,8 +19,13 @@ const STATUS_PILL: Record<string, string> = {
 };
 
 export function App() {
-  const { conn, sessions, sessionsById, messagesBySession, subscribeToSession } =
-    useConductor();
+  const {
+    conn,
+    sessions,
+    sessionsById,
+    messagesBySession,
+    subscribeToSession,
+  } = useConductor();
   const [activeId, setActiveId] = useState<string | null>(null);
   const run = useEffectRunner();
 
@@ -39,7 +45,7 @@ export function App() {
   }, [activeId, subscribeToSession]);
 
   const active = activeId ? sessionsById[activeId] : null;
-  const messages = activeId ? messagesBySession[activeId] ?? [] : [];
+  const messages = activeId ? (messagesBySession[activeId] ?? []) : [];
 
   return (
     <div className="app">
@@ -73,7 +79,7 @@ export function App() {
                     <StatusDot status={active.status} />
                     {active.status === "needs_input" && active.lastNotification
                       ? active.lastNotification
-                      : STATUS_PILL[active.status] ?? active.status}
+                      : (STATUS_PILL[active.status] ?? active.status)}
                   </span>
                   <button
                     className="detach-btn"
@@ -90,15 +96,23 @@ export function App() {
                 </div>
               </div>
               <Transcript messages={messages} />
-              <Composer
-                sessionId={active.id}
-                disabled={!(active.tty || active.itermSessionId)}
-                disabledReason={
-                  !(active.tty || active.itermSessionId)
-                    ? "Re-run /conductor-add inside Terminal.app or iTerm2 to enable sending."
-                    : undefined
-                }
-              />
+              {active.pendingQuestion &&
+              active.pendingQuestion.questions.length > 0 ? (
+                <QuestionCard
+                  sessionId={active.id}
+                  pending={active.pendingQuestion}
+                />
+              ) : (
+                <Composer
+                  sessionId={active.id}
+                  disabled={!(active.tty || active.itermSessionId)}
+                  disabledReason={
+                    !(active.tty || active.itermSessionId)
+                      ? "Re-run /conductor-add inside Terminal.app or iTerm2 to enable sending."
+                      : undefined
+                  }
+                />
+              )}
             </>
           ) : (
             <div className="empty-main">
@@ -106,7 +120,12 @@ export function App() {
                 <div className="empty-main-title">No sessions attached</div>
                 <div className="empty-main-sub">
                   Open Claude in any Terminal.app tab and run{" "}
-                  <code style={{ fontFamily: "var(--font-mono)", color: "var(--accent)" }}>
+                  <code
+                    style={{
+                      fontFamily: "var(--font-mono)",
+                      color: "var(--accent)",
+                    }}
+                  >
                     /conductor-add
                   </code>
                   . It will appear here instantly.

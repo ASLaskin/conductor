@@ -1,23 +1,16 @@
-import {
-  Context,
-  Effect,
-  Fiber,
-  Layer,
-  Option,
-  Ref,
-  Stream,
-} from "effect";
+import { Context, Effect, Fiber, Layer, Option, Ref, Stream } from "effect";
 import type { Scope } from "effect";
 import { randomUUID } from "node:crypto";
 import { EventBus } from "./EventBus.ts";
 import { Jsonl } from "./Jsonl.ts";
 import { Terminal } from "./Terminal.ts";
 import {
+  NoPendingQuestion,
   NoTerminalLink,
   OsascriptFailed,
   SessionNotFound,
 } from "./errors.ts";
-import type { Message, Session } from "./types.ts";
+import type { Message, PendingQuestionItem, Session } from "./types.ts";
 
 const MAX_MESSAGES_PER_SESSION = 500;
 
@@ -34,6 +27,17 @@ export type HookPayload = {
   readonly message?: string;
 };
 
+export type AskQuestionPayload = {
+  readonly claude_session_id: string;
+  readonly message?: string;
+  readonly questions: PendingQuestionItem[];
+};
+
+export type AnswerItem = {
+  readonly optionIndices: ReadonlyArray<number>;
+  readonly otherText?: string;
+};
+
 export class SessionStore extends Context.Tag("conductor/SessionStore")<
   SessionStore,
   {
@@ -45,15 +49,69 @@ export class SessionStore extends Context.Tag("conductor/SessionStore")<
     readonly sendInput: (
       id: string,
       text: string,
-    ) => Effect.Effect<void, SessionNotFound | NoTerminalLink | OsascriptFailed>;
+    ) => Effect.Effect<
+      void,
+      SessionNotFound | NoTerminalLink | OsascriptFailed
+    >;
+    readonly answerQuestion: (
+      id: string,
+      answers: ReadonlyArray<AnswerItem>,
+    ) => Effect.Effect<
+      void,
+      SessionNotFound | NoTerminalLink | NoPendingQuestion | OsascriptFailed
+    >;
     readonly onHookSessionStart: (payload: HookPayload) => Effect.Effect<void>;
     readonly onHookNotification: (payload: HookPayload) => Effect.Effect<void>;
+    readonly onHookAskQuestion: (
+      payload: AskQuestionPayload,
+    ) => Effect.Effect<void>;
+    readonly onHookAskAnswered: (payload: HookPayload) => Effect.Effect<void>;
     readonly onHookStop: (payload: HookPayload) => Effect.Effect<void>;
     readonly onHookUserPromptSubmit: (
       payload: HookPayload,
     ) => Effect.Effect<void>;
   }
 >() {}
+export function keysForAnswer(
+  item: PendingQuestionItem,
+  answer: AnswerItem,
+): string[] {
+  const tokens: string[] = [];
+  const optCount = item.options.length;
+  const otherText = answer.otherText?.trim() ?? "";
+  const hasOther = otherText.length > 0;
+  const indices = [...answer.optionIndices]
+    .filter((n) => Number.isInteger(n) && n >= 0 && n < optCount)
+    .sort((a, b) => a - b);
+
+  if (item.multiSelect) {
+    let cur = 0;
+    for (const idx of indices) {
+      for (let k = cur; k < idx; k++) tokens.push("DOWN");
+      tokens.push("ENTER");
+      cur = idx;
+    }
+    if (hasOther) {
+      for (let k = cur; k < optCount; k++) tokens.push("DOWN");
+      tokens.push("T:" + otherText);
+    }
+    tokens.push("RIGHT");
+    tokens.push("ENTER");
+    return tokens;
+  }
+
+  // single-select
+  if (hasOther) {
+    for (let k = 0; k < optCount; k++) tokens.push("DOWN");
+    tokens.push("T:" + otherText);
+    tokens.push("ENTER");
+    return tokens;
+  }
+  const idx = indices.length ? indices[0] : 0;
+  for (let k = 0; k < idx; k++) tokens.push("DOWN");
+  tokens.push("ENTER");
+  return tokens;
+}
 
 export const SessionStoreLive = Layer.scoped(
   SessionStore,
@@ -112,9 +170,7 @@ export const SessionStoreLive = Layer.scoped(
         if (next.length > MAX_MESSAGES_PER_SESSION) {
           next.splice(0, next.length - MAX_MESSAGES_PER_SESSION);
         }
-        yield* Ref.update(transcripts, (m) =>
-          new Map(m).set(sessionId, next),
-        );
+        yield* Ref.update(transcripts, (m) => new Map(m).set(sessionId, next));
 
         const preview = firstText(message.blocks);
         const updated: Session = {
@@ -235,7 +291,10 @@ export const SessionStoreLive = Layer.scoped(
     const sendInput = (
       id: string,
       text: string,
-    ): Effect.Effect<void, SessionNotFound | NoTerminalLink | OsascriptFailed> =>
+    ): Effect.Effect<
+      void,
+      SessionNotFound | NoTerminalLink | OsascriptFailed
+    > =>
       Effect.gen(function* () {
         const map = yield* Ref.get(sessions);
         const s = map.get(id);
@@ -254,6 +313,47 @@ export const SessionStoreLive = Layer.scoped(
         const updated: Session = {
           ...s,
           status: "thinking",
+          lastEventAt: Date.now(),
+        };
+        yield* setSession(updated);
+        yield* bus.publish({ type: "session_updated", session: updated });
+      });
+
+    const answerQuestion = (
+      id: string,
+      answers: ReadonlyArray<AnswerItem>,
+    ): Effect.Effect<
+      void,
+      SessionNotFound | NoTerminalLink | NoPendingQuestion | OsascriptFailed
+    > =>
+      Effect.gen(function* () {
+        const map = yield* Ref.get(sessions);
+        const s = map.get(id);
+        if (!s) return yield* new SessionNotFound({ id });
+        if (!s.pendingQuestion) {
+          return yield* new NoPendingQuestion({ sessionId: id });
+        }
+        if (!s.itermSessionId && !s.tty) {
+          return yield* new NoTerminalLink({ sessionId: id });
+        }
+
+        // answer each question in order
+        const items = s.pendingQuestion.questions;
+        for (let i = 0; i < items.length; i++) {
+          const answer = answers[i] ?? { optionIndices: [] };
+          const tokens = keysForAnswer(items[i], answer);
+          if (s.itermSessionId) {
+            yield* terminal.sendKeysIterm(s.itermSessionId, tokens);
+          } else if (s.tty) {
+            yield* terminal.sendKeysTerminalApp(s.tty, tokens);
+          }
+          if (i < items.length - 1) yield* Effect.sleep("250 millis");
+        }
+
+        const updated: Session = {
+          ...s,
+          status: "thinking",
+          pendingQuestion: undefined,
           lastEventAt: Date.now(),
         };
         yield* setSession(updated);
@@ -287,14 +387,28 @@ export const SessionStoreLive = Layer.scoped(
       attach,
       detach,
       sendInput,
-      // SessionStart hook is informational only — attach happens when the user
-      // runs /conductor-add. keep the entry point so install.sh can wire it.
+      answerQuestion,
       onHookSessionStart: () => Effect.void,
       onHookNotification: (p) =>
         updateStatus(p.claude_session_id, (s) => ({
           ...s,
           status: "needs_input",
           lastNotification: p.message ?? "Needs your input",
+          lastEventAt: Date.now(),
+        })),
+      onHookAskQuestion: (p) =>
+        updateStatus(p.claude_session_id, (s) => ({
+          ...s,
+          status: "needs_input",
+          lastNotification: p.message ?? "Claude is asking a question",
+          pendingQuestion: { questions: p.questions },
+          lastEventAt: Date.now(),
+        })),
+      onHookAskAnswered: (p) =>
+        updateStatus(p.claude_session_id, (s) => ({
+          ...s,
+          status: "thinking",
+          pendingQuestion: undefined,
           lastEventAt: Date.now(),
         })),
       onHookStop: (p) =>

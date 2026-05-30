@@ -1,5 +1,15 @@
 export type SessionStatus = "idle" | "thinking" | "needs_input" | "ended";
 
+export type PendingQuestionOption = { label: string; description?: string };
+export type PendingQuestionItem = {
+  header: string;
+  question: string;
+  multiSelect: boolean;
+  options: PendingQuestionOption[];
+};
+export type PendingQuestion = { questions: PendingQuestionItem[] };
+export type AnswerItem = { optionIndices: number[]; otherText?: string };
+
 export type Session = {
   id: string;
   claudeSessionId: string;
@@ -10,6 +20,7 @@ export type Session = {
   lastEventAt: number;
   lastMessagePreview?: string;
   lastNotification?: string;
+  pendingQuestion?: PendingQuestion;
   tty?: string;
   itermSessionId?: string;
 };

@@ -29,18 +29,20 @@ with open(settings_path) as f:
 hooks = data.setdefault("hooks", {})
 
 WIRINGS = [
-    ("SessionStart",     "session_start"),
-    ("Notification",     "notification"),
-    ("Stop",             "stop"),
-    ("UserPromptSubmit", "user_prompt_submit"),
+    ("SessionStart",     "session_start",      ""),
+    ("Notification",     "notification",       ""),
+    ("Stop",             "stop",               ""),
+    ("UserPromptSubmit", "user_prompt_submit", ""),
+    ("PreToolUse",       "ask_question",       "AskUserQuestion"),
+    ("PostToolUse",      "ask_answered",       "AskUserQuestion"),
 ]
 
-for event, arg in WIRINGS:
+for event, arg, matcher in WIRINGS:
     arr = hooks.setdefault(event, [])
     desired_cmd = f'bash "{hook_path}" {arg}'
-    group = next((g for g in arr if g.get("matcher", "") == ""), None)
+    group = next((g for g in arr if g.get("matcher", "") == matcher), None)
     if group is None:
-        group = {"matcher": "", "hooks": []}
+        group = {"matcher": matcher, "hooks": []}
         arr.append(group)
     inner = group.setdefault("hooks", [])
     inner[:] = [h for h in inner if "conductor-hook.sh" not in (h.get("command") or "")]

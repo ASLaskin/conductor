@@ -79,6 +79,30 @@ if data.get("cwd"):
     out["cwd"] = data["cwd"]
 if hook_type == "notification" and data.get("message"):
     out["message"] = data["message"]
+# ask_question is PreToolUse scoped to AskUserQuestion. forward the FULL
+# structured questions (so clients can render a real picker card) plus a short
+# one-line summary for the collapsed session-row preview.
+if hook_type == "ask_question":
+    ti = data.get("tool_input") or {}
+    structured = []
+    for q in ti.get("questions") or []:
+        structured.append({
+            "header": (q.get("header") or "").strip(),
+            "question": (q.get("question") or "").strip(),
+            "multiSelect": bool(q.get("multiSelect")),
+            "options": [
+                {
+                    "label": (o.get("label") or "").strip(),
+                    "description": (o.get("description") or "").strip(),
+                }
+                for o in (q.get("options") or [])
+            ],
+        })
+    if structured:
+        out["questions"] = structured
+        first = structured[0]["question"] or "Claude is asking a question"
+        extra = len(structured) - 1
+        out["message"] = f"{first}  (+{extra} more)" if extra else first
 print(json.dumps(out))
 PYEOF
 )

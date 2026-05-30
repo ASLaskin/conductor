@@ -1,5 +1,6 @@
 import { Context, Effect, Layer } from "effect";
 import { ApiError, HttpError, NetworkError } from "./errors";
+import type { AnswerItem } from "./types";
 
 // derive server URL from the host that served this page. on the Mac itself
 // that's `localhost:5173` → `localhost:4321`. from a phone over tailscale
@@ -16,6 +17,10 @@ export class ApiClient extends Context.Tag("conductor/ApiClient")<
     readonly sendInput: (
       id: string,
       text: string,
+    ) => Effect.Effect<void, NetworkError | HttpError | ApiError>;
+    readonly answerQuestion: (
+      id: string,
+      answers: AnswerItem[],
     ) => Effect.Effect<void, NetworkError | HttpError | ApiError>;
     readonly detachSession: (
       id: string,
@@ -64,6 +69,21 @@ export const ApiClientLive = Layer.succeed(
             ? Effect.void
             : Effect.fail(
                 new ApiError({ reason: data.reason ?? "send failed" }),
+              ),
+        ),
+      ),
+    answerQuestion: (id, answers) =>
+      request(`/sessions/${id}/answer`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers }),
+      }).pipe(
+        Effect.flatMap(json<{ ok: boolean; reason?: string }>),
+        Effect.flatMap((data) =>
+          data.ok
+            ? Effect.void
+            : Effect.fail(
+                new ApiError({ reason: data.reason ?? "answer failed" }),
               ),
         ),
       ),
