@@ -40,11 +40,12 @@ const ITERM_PASTE_SCRIPT = `on run argv
   set targetId to item 1 of argv
   set theText to item 2 of argv
   -- inject the text as a bracketed paste (ESC[200~ ... ESC[201~) straight into
-  -- the session's tty via write text, then a second write text sends the lone
-  -- submit CR. both go through the same channel, so the CR is guaranteed to
-  -- arrive *after* the paste-close marker — Claude's REPL keeps the newlines as
-  -- one input and then submits. no focus steal, no clipboard, no System Events
-  -- timing race (which is what made Return land inside the paste before).
+  -- the session's tty, let it settle, then send an explicit CR to submit. all
+  -- through the same channel so the CR lands *after* the paste-close marker.
+  -- the settle delay matters: Claude collapses a multi-line paste into a
+  -- "[Pasted text]" chip and a CR fired too soon gets dropped (the input then
+  -- just sits there) — this was the intermittent "didn't submit" bug. no focus
+  -- steal, no clipboard, no System Events.
   set pasteSeq to (ASCII character 27) & "[200~" & theText & (ASCII character 27) & "[201~"
   tell application "iTerm"
     repeat with w in windows
@@ -52,7 +53,8 @@ const ITERM_PASTE_SCRIPT = `on run argv
         repeat with s in sessions of t
           if (unique id of s) is targetId then
             tell s to write text pasteSeq newline NO
-            tell s to write text ""
+            delay 0.12
+            tell s to write text (ASCII character 13) newline NO
             return "ok"
           end if
         end repeat

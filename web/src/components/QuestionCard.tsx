@@ -1,5 +1,6 @@
 import { Effect, Exit } from "effect";
 import { useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { ApiClient } from "../lib/ApiClient";
 import { useEffectRunner } from "../lib/useEffectRunner";
 import type { AnswerItem, PendingQuestion } from "../lib/types";
@@ -72,9 +73,15 @@ export function QuestionCard({
   };
 
   const multi = questions.length > 1;
+  const reduce = useReducedMotion();
 
   return (
-    <div className="question-card">
+    <motion.div
+      className="question-card"
+      initial={{ opacity: 0, y: reduce ? 0 : 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, ease: "easeOut" }}
+    >
       <div className="qc-top">
         <span className="qc-eyebrow">Claude is asking</span>
         {multi && (
@@ -161,7 +168,7 @@ export function QuestionCard({
               : "Submit answer"}
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }
 

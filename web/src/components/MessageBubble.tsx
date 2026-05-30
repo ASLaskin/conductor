@@ -1,4 +1,5 @@
 import type { Message, MessageBlock } from "../lib/types";
+import { Markdown } from "./Markdown";
 
 export function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
@@ -34,7 +35,11 @@ function Block({ block }: { block: MessageBlock }) {
   switch (block.type) {
     case "text":
       if (!block.text.trim()) return null;
-      return <div className="bubble bubble-assistant">{block.text}</div>;
+      return (
+        <div className="bubble bubble-assistant">
+          <Markdown>{block.text}</Markdown>
+        </div>
+      );
     case "thinking":
       return <div className="bubble bubble-thinking">{block.text}</div>;
     case "tool_use":

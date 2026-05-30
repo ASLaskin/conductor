@@ -108,11 +108,10 @@ const tail = (
         fileWatcher = watch(path, () => {
           if (!state.closed) void readNew();
         });
-      } catch {
-        pollTimer = setInterval(() => {
-          if (!state.closed) void readNew();
-        }, 1000);
-      }
+      } catch {}
+      pollTimer = setInterval(() => {
+        if (!state.closed) void readNew();
+      }, 300);
     };
 
     const beginOnce = (): void => {
@@ -155,10 +154,7 @@ const tail = (
     });
   });
 
-export const JsonlLive = Layer.succeed(
-  Jsonl,
-  Jsonl.of({ readAll, tail }),
-);
+export const JsonlLive = Layer.succeed(Jsonl, Jsonl.of({ readAll, tail }));
 
 function entryToMessage(entry: any, sessionId: string): Message | null {
   if (!entry || typeof entry !== "object") return null;
@@ -182,7 +178,9 @@ function entryToMessage(entry: any, sessionId: string): Message | null {
               ? c.content
               : Array.isArray(c.content)
                 ? c.content
-                    .map((x: any) => (typeof x?.text === "string" ? x.text : ""))
+                    .map((x: any) =>
+                      typeof x?.text === "string" ? x.text : "",
+                    )
                     .join("\n")
                 : "";
           blocks.push({

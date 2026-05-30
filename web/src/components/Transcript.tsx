@@ -1,10 +1,12 @@
 import { useEffect, useRef } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import type { Message } from "../lib/types";
 import { MessageBubble } from "./MessageBubble";
 
 export function Transcript({ messages }: { messages: Message[] }) {
   const ref = useRef<HTMLDivElement | null>(null);
   const lastCount = useRef(0);
+  const reduce = useReducedMotion();
 
   useEffect(() => {
     const el = ref.current;
@@ -30,7 +32,15 @@ export function Transcript({ messages }: { messages: Message[] }) {
   return (
     <div className="transcript" ref={ref}>
       {messages.map((m) => (
-        <MessageBubble key={m.id} message={m} />
+        <motion.div
+          key={m.id}
+          className="msg"
+          initial={{ opacity: 0, y: reduce ? 0 : 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+        >
+          <MessageBubble message={m} />
+        </motion.div>
       ))}
     </div>
   );
