@@ -53,3 +53,10 @@ export type WSEvent =
   | { type: "messages_replay"; sessionId: string; messages: Message[] };
 
 export type ConnState = "disconnected" | "connecting" | "connected";
+
+export type PendingSend = {
+  localId: string;
+  text: string;
+  sentAt: number;
+  status: "sending" | "failed";
+};

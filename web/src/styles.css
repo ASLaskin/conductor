@@ -178,6 +178,27 @@ input, textarea { font: inherit; color: inherit; background: none; border: none;
 .role-label { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); margin-bottom: 2px; padding: 0; }
 .role-label-user { align-self: flex-end; }
 
+/* optimistic send (pending / failed delivery) */
+.bubble.pending[data-status="sending"] { opacity: 0.66; }
+.bubble.pending[data-status="failed"] { border-color: var(--error); }
+.send-status {
+  align-self: flex-end;
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  font-family: var(--font-mono); font-size: 11px; margin-top: 1px;
+}
+.send-status-sending { color: var(--muted-soft); }
+.send-status-failed { color: var(--error); }
+.send-spinner {
+  width: 9px; height: 9px; border-radius: 50%;
+  border: 1.5px solid var(--muted-soft); border-top-color: transparent;
+  animation: spin 0.7s linear infinite;
+}
+.send-action { font-family: var(--font-mono); font-size: 11px; color: var(--primary); text-decoration: underline; }
+.send-action:hover { color: var(--primary-active); }
+.send-action-dim { color: var(--muted-soft); }
+.send-action-dim:hover { color: var(--text); }
+@keyframes spin { to { transform: rotate(360deg); } }
+
 /* ─── markdown ────────────────────────────────────────────────────────── */
 .md { white-space: normal; font-size: 15px; line-height: 1.65; color: var(--text); }
 .md > *:first-child { margin-top: 0; }
