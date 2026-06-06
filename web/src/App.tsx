@@ -1,4 +1,4 @@
-import { Effect, Exit } from "effect";
+import { Effect } from "effect";
 import { useEffect, useState } from "react";
 import { useConductor } from "./lib/api";
 import { ApiClient } from "./lib/ApiClient";
@@ -19,16 +19,8 @@ const STATUS_PILL: Record<string, string> = {
 };
 
 export function App() {
-  const {
-    conn,
-    sessions,
-    sessionsById,
-    messagesBySession,
-    pendingBySession,
-    subscribeToSession,
-    addPendingSend,
-    removePendingSend,
-  } = useConductor();
+  const { conn, sessions, sessionsById, messagesBySession, subscribeToSession } =
+    useConductor();
   const [activeId, setActiveId] = useState<string | null>(null);
   const run = useEffectRunner();
 
@@ -49,17 +41,6 @@ export function App() {
 
   const active = activeId ? sessionsById[activeId] : null;
   const messages = activeId ? (messagesBySession[activeId] ?? []) : [];
-  const pending = activeId ? (pendingBySession[activeId] ?? []) : [];
-
-  // re-inject a prompt that wasn't confirmed delivered.
-  const resend = (text: string) => {
-    if (!activeId) return;
-    void run(
-      ApiClient.pipe(Effect.flatMap((c) => c.sendInput(activeId, text))),
-    ).then((exit) => {
-      if (Exit.isSuccess(exit)) addPendingSend(activeId, text);
-    });
-  };
 
   return (
     <div className="app">
@@ -109,12 +90,7 @@ export function App() {
                   </button>
                 </div>
               </div>
-              <Transcript
-                messages={messages}
-                pending={pending}
-                onResend={resend}
-                onDismiss={(localId) => removePendingSend(active.id, localId)}
-              />
+              <Transcript messages={messages} />
               {active.pendingQuestion &&
               active.pendingQuestion.questions.length > 0 ? (
                 <QuestionCard
@@ -130,7 +106,6 @@ export function App() {
                       ? "Re-run /conductor-add inside Terminal.app or iTerm2 to enable sending."
                       : undefined
                   }
-                  onSent={(text) => addPendingSend(active.id, text)}
                 />
               )}
             </>

@@ -7,12 +7,10 @@ export function Composer({
   sessionId,
   disabled,
   disabledReason,
-  onSent,
 }: {
   sessionId: string;
   disabled: boolean;
   disabledReason?: string;
-  onSent?: (text: string) => void;
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -30,9 +28,6 @@ export function Composer({
     );
     setSending(false);
     if (Exit.isSuccess(exit)) {
-      // keystrokes were injected — register the optimistic send so the
-      // transcript shows it immediately and confirms/flags delivery.
-      onSent?.(t);
       setText("");
       requestAnimationFrame(() => {
         if (taRef.current) taRef.current.style.height = "auto";

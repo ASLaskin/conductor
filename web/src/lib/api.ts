@@ -1,33 +1,12 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { WS_URL } from "./ApiClient";
-import type {
-  ConnState,
-  Message,
-  PendingSend,
-  Session,
-  WSEvent,
-} from "./types";
-
-// how long to wait for the real user message to land before flagging the send
-// as "not delivered". the terminal logs a submitted prompt to JSONL within
-// ~1s, so anything past this almost certainly didn't submit (or fs.watch missed
-// it — either way the user needs to know).
-const DELIVERY_TIMEOUT_MS = 5000;
-
-const norm = (s: string) => s.replace(/\s+/g, " ").trim();
-
-const userText = (m: Message) =>
-  m.blocks
-    .filter((b) => b.type === "text")
-    .map((b) => (b as { text: string }).text)
-    .join("\n");
+import type { ConnState, Message, Session, WSEvent } from "./types";
 
 export type ConductorState = {
   conn: ConnState;
   sessions: Session[];
   sessionsById: Record<string, Session>;
   messagesBySession: Record<string, Message[]>;
-  pendingBySession: Record<string, PendingSend[]>;
 };
 
 export function useConductor() {
@@ -36,7 +15,6 @@ export function useConductor() {
     sessions: [],
     sessionsById: {},
     messagesBySession: {},
-    pendingBySession: {},
   });
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -77,27 +55,13 @@ export function useConductor() {
         case "message": {
           const prior = s.messagesBySession[evt.sessionId] ?? [];
           if (prior.some((m) => m.id === evt.message.id)) return s;
-          const next: ConductorState = {
+          return {
             ...s,
             messagesBySession: {
               ...s.messagesBySession,
               [evt.sessionId]: [...prior, evt.message],
             },
           };
-          if (evt.message.role === "user") {
-            const pend = s.pendingBySession[evt.sessionId];
-            if (pend?.length) {
-              const incoming = norm(userText(evt.message));
-              const remaining = pend.filter((p) => norm(p.text) !== incoming);
-              if (remaining.length !== pend.length) {
-                next.pendingBySession = {
-                  ...s.pendingBySession,
-                  [evt.sessionId]: remaining,
-                };
-              }
-            }
-          }
-          return next;
         }
         case "messages_replay": {
           return {
@@ -178,67 +142,7 @@ export function useConductor() {
     }
   }, []);
 
-  // record an optimistic send so the UI shows it immediately and can confirm /
-  // flag delivery. returns the localId so the caller can reference it.
-  const addPendingSend = useCallback((sessionId: string, text: string) => {
-    const localId = `pending-${Date.now()}-${Math.round(Math.random() * 1e6)}`;
-    setState((s) => ({
-      ...s,
-      pendingBySession: {
-        ...s.pendingBySession,
-        [sessionId]: [
-          ...(s.pendingBySession[sessionId] ?? []),
-          { localId, text, sentAt: Date.now(), status: "sending" as const },
-        ],
-      },
-    }));
-    return localId;
-  }, []);
-
-  const removePendingSend = useCallback(
-    (sessionId: string, localId: string) => {
-      setState((s) => {
-        const list = s.pendingBySession[sessionId];
-        if (!list) return s;
-        return {
-          ...s,
-          pendingBySession: {
-            ...s.pendingBySession,
-            [sessionId]: list.filter((p) => p.localId !== localId),
-          },
-        };
-      });
-    },
-    [],
-  );
-
-  // sweep: flip still-"sending" placeholders to "failed" once the delivery
-  // window elapses without a matching real message arriving.
-  useEffect(() => {
-    const t = setInterval(() => {
-      setState((s) => {
-        let changed = false;
-        const now = Date.now();
-        const next: Record<string, PendingSend[]> = {};
-        for (const [sid, list] of Object.entries(s.pendingBySession)) {
-          next[sid] = list.map((p) => {
-            if (
-              p.status === "sending" &&
-              now - p.sentAt > DELIVERY_TIMEOUT_MS
-            ) {
-              changed = true;
-              return { ...p, status: "failed" as const };
-            }
-            return p;
-          });
-        }
-        return changed ? { ...s, pendingBySession: next } : s;
-      });
-    }, 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  return { ...state, subscribeToSession, addPendingSend, removePendingSend };
+  return { ...state, subscribeToSession };
 }
 
 function orderSessions(byId: Record<string, Session>): Session[] {
