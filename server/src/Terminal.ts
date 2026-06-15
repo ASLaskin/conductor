@@ -36,74 +36,6 @@ const TERMINAL_APP_SINGLE_SCRIPT = `on run argv
   return "not_found"
 end run`;
 
-const ITERM_PASTE_SCRIPT = `on run argv
-  set targetId to item 1 of argv
-  set theText to item 2 of argv
-  -- inject the text as a bracketed paste (ESC[200~ ... ESC[201~) straight into
-  -- the session's tty, let it settle, then send an explicit CR to submit. all
-  -- through the same channel so the CR lands *after* the paste-close marker.
-  -- the settle delay matters: Claude collapses a multi-line paste into a
-  -- "[Pasted text]" chip and a CR fired too soon gets dropped (the input then
-  -- just sits there) — this was the intermittent "didn't submit" bug. no focus
-  -- steal, no clipboard, no System Events.
-  set pasteSeq to (ASCII character 27) & "[200~" & theText & (ASCII character 27) & "[201~"
-  tell application "iTerm"
-    repeat with w in windows
-      repeat with t in tabs of w
-        repeat with s in sessions of t
-          if (unique id of s) is targetId then
-            tell s to write text pasteSeq newline NO
-            delay 0.12
-            tell s to write text (ASCII character 13) newline NO
-            return "ok"
-          end if
-        end repeat
-      end repeat
-    end repeat
-  end tell
-  return "not_found"
-end run`;
-
-const TERMINAL_APP_PASTE_SCRIPT = `on run argv
-  set targetTty to item 1 of argv
-  set theText to item 2 of argv
-  set savedClip to ""
-  try
-    set savedClip to (the clipboard as text)
-  end try
-  set the clipboard to theText
-  set found to false
-  tell application "Terminal"
-    repeat with w in windows
-      repeat with t in tabs of w
-        if tty of t is targetTty then
-          set selected of t to true
-          set frontmost of w to true
-          set found to true
-          exit repeat
-        end if
-      end repeat
-      if found then exit repeat
-    end repeat
-    if found then activate
-  end tell
-  if not found then
-    set the clipboard to savedClip
-    return "not_found"
-  end if
-  delay 0.25
-  tell application "System Events"
-    keystroke "v" using command down
-    -- let the bracketed-paste close marker (ESC[201~) flush before Return,
-    -- otherwise the \\r lands inside the paste block and never submits.
-    delay 0.5
-    key code 36
-  end tell
-  delay 0.1
-  set the clipboard to savedClip
-  return "ok"
-end run`;
-
 // answering an AskUserQuestion picker means driving its selector, not typing
 // text — so we synthesize navigation keystrokes. callers pass an ordered token
 // list (DOWN/UP/LEFT/RIGHT/SPACE/ENTER/ESC, or "T:<literal>" for free-text).
@@ -277,36 +209,28 @@ const runScriptArgs = (
 
 const send = (
   singleScript: string,
-  pasteScript: string,
   target: string,
   text: string,
   label: string,
 ): Effect.Effect<void, OsascriptFailed> =>
   Effect.gen(function* () {
-    const trimmed = text.replace(/\r\n/g, "\n").replace(/^\n+|\n+$/g, "");
-    if (!trimmed.trim()) {
+    const oneLine = text
+      .replace(/\r\n/g, "\n")
+      .replace(/\s*\n\s*/g, " ")
+      .trim();
+    if (!oneLine) {
       return yield* new OsascriptFailed({ target, reason: "empty" });
     }
-    if (trimmed.includes("\n")) {
-      yield* runScript(pasteScript, target, trimmed, label);
-    } else {
-      yield* runScript(singleScript, target, trimmed, label);
-    }
+    yield* runScript(singleScript, target, oneLine, label);
   });
 
 export const TerminalLive = Layer.succeed(
   Terminal,
   Terminal.of({
     writeToIterm: (uuid, text) =>
-      send(ITERM_SINGLE_SCRIPT, ITERM_PASTE_SCRIPT, uuid, text, "iTerm session"),
+      send(ITERM_SINGLE_SCRIPT, uuid, text, "iTerm session"),
     writeToTerminalApp: (tty, text) =>
-      send(
-        TERMINAL_APP_SINGLE_SCRIPT,
-        TERMINAL_APP_PASTE_SCRIPT,
-        tty,
-        text,
-        "Terminal.app tab",
-      ),
+      send(TERMINAL_APP_SINGLE_SCRIPT, tty, text, "Terminal.app tab"),
     sendKeysIterm: (uuid, tokens) =>
       runScriptArgs(ITERM_KEYS_SCRIPT, [uuid, ...tokens], "iTerm session"),
     sendKeysTerminalApp: (tty, tokens) =>
